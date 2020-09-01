@@ -88,6 +88,7 @@ mod jar;
 mod delta;
 mod draft;
 mod crumb;
+mod iter;
 
 #[cfg(any(feature = "private", feature = "signed"))] #[macro_use] mod secure;
 #[cfg(any(feature = "private", feature = "signed"))] pub use secure::*;
@@ -109,6 +110,7 @@ pub use crate::builder::CookieBuilder;
 pub use crate::jar::{CookieJar, Delta, Iter};
 pub use crate::crumb::CookieCrumb;
 pub use crate::draft::*;
+pub use crate::iter::CookieIter;
 
 #[derive(Debug, Clone)]
 enum CookieStr<'c> {
@@ -312,6 +314,57 @@ impl<'c> Cookie<'c> {
         where S: Into<Cow<'c, str>>
     {
         parse_cookie(s, true)
+    }
+
+    /// Parses a `Cookie:` header and returns an iterator over the parsed values.
+    ///
+    /// This function assumes it is receiving the value of a `Cookie:` header. Therefore
+    /// the returned `Cookie`s will only contain a name and value. All attributes will be
+    /// None.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use cookie::Cookie;
+    /// use cookie::ParseError;
+    ///
+    /// let mut cookie_iter = Cookie::parse_string("hello=world; foo=bar%20baz; bin");
+    /// assert_eq!(Some(Ok(Cookie::new("hello", "world"))), cookie_iter.next());
+    /// assert_eq!(Some(Ok(Cookie::new("foo", "bar%20baz"))), cookie_iter.next());
+    /// assert_eq!(Some(Err(ParseError::MissingPair)), cookie_iter.next());
+    /// assert_eq!(None, cookie_iter.next());
+    /// ```
+    pub fn parse_string<S>(s: S) -> CookieIter<'c>
+        where S: Into<Cow<'c, str>>
+    {
+        CookieIter {remaining: Some(s.into()), encoded: false}
+    }
+
+    /// Parses a `Cookie:` header where the name and value are percent-encoded and
+    /// returns an iterator over the percent-decoded values.
+    ///
+    /// This function assumes it is receiving the value of a `Cookie:` header. Therefore
+    /// the returned `Cookie`s will only contain a name and value. All attributes will be
+    /// None.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use cookie::Cookie;
+    /// use cookie::ParseError;
+    ///
+    /// let mut cookie_iter = Cookie::parse_string_encoded("hello=world; foo=bar%20baz; bin");
+    /// assert_eq!(Some(Ok(Cookie::new("hello", "world"))), cookie_iter.next());
+    /// assert_eq!(Some(Ok(Cookie::new("foo", "bar baz"))), cookie_iter.next());
+    /// assert_eq!(Some(Err(ParseError::MissingPair)), cookie_iter.next());
+    /// assert_eq!(None, cookie_iter.next());
+    /// ```
+    #[cfg(feature = "percent-encode")]
+    #[cfg_attr(all(doc, not(doctest)), cfg(feature = "percent-encode"))]
+    pub fn parse_string_encoded<S>(s: S) -> CookieIter<'c>
+        where S: Into<Cow<'c, str>>
+    {
+        CookieIter {remaining: Some(s.into()), encoded: true}
     }
 
     /// Converts `self` into a `Cookie` with a static lifetime with as few
